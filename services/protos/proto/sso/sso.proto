@@ -6,14 +6,50 @@ package auth;
 option go_package = "krawwwwy.sso.v1;sso";
 
 service Auth {
-    rpc Register(RegisterRequest) returns (RegisterResponse);
+    rpc RegisterStudent(RegisterStudentRequest) returns (RegisterResponse);
+    rpc RegisterTeacher(RegisterTeacherRequest) returns (RegisterResponse);
+    rpc RegisterAdmin(RegisterAdminRequest) returns (RegisterResponse);
     rpc Login(LoginRequest) returns (LoginResponse);
-    rpc IsTeacher(IsAdminRequest) returns (IsAdminResponse);
+    rpc IsTeacher(IsTeacherRequest) returns (IsTeacherResponse);
     rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse);
-    rpc IsStudent(IsAdminRequest) returns (IsAdminResponse);
+    rpc IsStudent(IsStudentRequest) returns (IsStudentResponse);
 }
 
-message RegisterRequest {
+message Date{
+    int32 year = 1;
+    int32 month = 2;
+    int32 day = 3;
+}
+
+message RegisterStudentRequest {
+    string email = 1;
+    string password = 2;
+    string name = 3;
+    string surname = 4;
+    string middle_name = 5;
+    string phone_number = 6;
+    Date birth_date = 7;
+    string group = 8;
+    string student_number = 9;
+
+
+}
+
+message RegisterTeacherRequest {
+    string email = 1;
+    string password = 2;
+    string name = 3;
+    string surname = 4;
+    string middle_name = 5;
+    string phone_number = 6;
+    Date birth_date = 7;
+    string title =  8;
+    string department = 9;
+    string degree = 10;
+
+}
+
+message RegisterAdminRequest {
     string email = 1;
     string password = 2;
 }
@@ -22,9 +58,11 @@ message RegisterResponse {
     int64 user_id = 1;
 }
 
+
 message LoginRequest {
     string email = 1;
     string password = 2;
+    string role = 3;
 }
 
 message LoginResponse {
