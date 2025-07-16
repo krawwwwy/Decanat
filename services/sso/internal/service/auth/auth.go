@@ -52,9 +52,7 @@ type UserSaver interface {
 	) (userID int64, err error)
 }
 type UserDeleter interface {
-	DeleteStudent(ctx context.Context, userID int64) error
-	DeleteTeacher(ctx context.Context, userID int64) error
-	DeleteAdmin(ctx context.Context, userID int64) error
+	DeleteUser(ctx context.Context, userID int64, role string) (err error)
 }
 type UserProvider interface {
 	Student(ctx context.Context, email string) (models.Student, error)
@@ -66,10 +64,11 @@ type UserProvider interface {
 }
 
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidUserID      = errors.New("invalid userID")
-	ErrUserExists         = errors.New("user already exists")
-	ErrRoleNotExists      = errors.New("role does not exists")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrInvalidUserID       = errors.New("invalid userID")
+	ErrUserExists          = errors.New("user already exists")
+	ErrRoleNotExists       = errors.New("role does not exists")
+	ErrUserNotMatchingRole = errors.New("user not matching role")
 )
 
 const emptyID = 0
@@ -126,6 +125,11 @@ func (a *Auth) Login(ctx context.Context,
 			a.log.Warn("user not found", sl.Err(err))
 
 			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+		if errors.Is(err, storage.ErrUserHasAnotherRole) {
+			a.log.Warn("try to log with another role", sl.Err(err))
+
+			return "", fmt.Errorf("%s: %w", op, ErrUserNotMatchingRole)
 		}
 
 		a.log.Error("failed to get user", sl.Err(err))
@@ -277,7 +281,7 @@ func (a *Auth) RegisterAdmin(
 	return id, nil
 }
 
-func (a *Auth) DeleteStudent(ctx context.Context, userID int64) error {
+func (a *Auth) DeleteUser(ctx context.Context, userID int64, role string) error {
 	const op = "auth.DeleteStudent"
 
 	log := a.log.With(
@@ -285,12 +289,17 @@ func (a *Auth) DeleteStudent(ctx context.Context, userID int64) error {
 		slog.Int("user_id", int(userID)),
 	)
 
-	err := a.userDeleter.DeleteStudent(ctx, userID)
+	err := a.userDeleter.DeleteUser(ctx, userID, role)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
-			log.Warn("student not found", sl.Err(err))
+			log.Warn("user not found", sl.Err(err))
 
-			return fmt.Errorf("%s: %w", op, ErrUserExists)
+			return fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+		if errors.Is(err, storage.ErrUserDontHasThisRole) {
+			log.Warn("user have another role", sl.Err(err))
+
+			return fmt.Errorf("%s: %w", op, ErrUserNotMatchingRole)
 		}
 
 		log.Error("failed to delete student", sl.Err(err))
@@ -298,59 +307,7 @@ func (a *Auth) DeleteStudent(ctx context.Context, userID int64) error {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	log.Info("student deleted")
-
-	return nil
-}
-
-func (a *Auth) DeleteTeacher(ctx context.Context, userID int64) error {
-	const op = "auth.DeleteTeacher"
-
-	log := a.log.With(
-		slog.String("op", op),
-		slog.Int("user_id", int(userID)),
-	)
-
-	err := a.userDeleter.DeleteTeacher(ctx, userID)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
-			log.Warn("teacher not found", sl.Err(err))
-
-			return fmt.Errorf("%s: %w", op, ErrUserExists)
-		}
-
-		log.Error("failed to delete Teacher", sl.Err(err))
-
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	log.Info("teacher deleted")
-
-	return nil
-}
-
-func (a *Auth) DeleteAdmin(ctx context.Context, userID int64) error {
-	const op = "auth.DeleteAdmin"
-
-	log := a.log.With(
-		slog.String("op", op),
-		slog.Int("user_id", int(userID)),
-	)
-
-	err := a.userDeleter.DeleteStudent(ctx, userID)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
-			log.Warn("admin not found", sl.Err(err))
-
-			return fmt.Errorf("%s: %w", op, ErrUserExists)
-		}
-
-		log.Error("failed to admin", sl.Err(err))
-
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	log.Info("admin deleted")
+	log.Info("user  deleted")
 
 	return nil
 }
