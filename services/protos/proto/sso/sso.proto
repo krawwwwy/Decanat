@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package auth;
 
+import "google/protobuf/empty.proto";
 
 option go_package = "krawwwwy.sso.v1;sso";
 
@@ -13,6 +14,7 @@ service Auth {
     rpc IsTeacher(IsTeacherRequest) returns (IsTeacherResponse);
     rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse);
     rpc IsStudent(IsStudentRequest) returns (IsStudentResponse);
+    rpc DeleteUser(DeleteRequest) returns (google.protobuf.Empty);
 }
 
 message Date{
@@ -90,4 +92,9 @@ message IsStudentRequest {
 }
 message IsStudentResponse {
     bool is_student = 1;
+}
+
+message DeleteRequest {
+    int64 user_id = 1;
+    string role = 2;
 }
