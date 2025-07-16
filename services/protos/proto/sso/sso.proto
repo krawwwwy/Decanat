@@ -7,33 +7,40 @@ import "google/protobuf/empty.proto";
 option go_package = "krawwwwy.sso.v1;sso";
 
 service Auth {
+    // Пользователь отправляет заявку на регистрацию
     rpc RegisterPending(RegisterPendingRequest) returns (RegisterPendingResponse);
 
+    // Получить список неподтверждённых пользователей
     rpc GetPendingList(google.protobuf.Empty) returns (GetPendingListResponse);
 
+    // Удалить неподтверждённого пользователя
     rpc DeletePendingUser(DeletePendingUserRequest) returns (google.protobuf.Empty);
 
+    // Подтвердить регистрацию (перевод из Redis в БД)
     rpc ApprovePendingUser(ApprovePendingUserRequest) returns (google.protobuf.Empty);
 
-    rpc RegisterStudent(RegisterStudentRequest) returns (RegisterResponse);
-    rpc RegisterTeacher(RegisterTeacherRequest) returns (RegisterResponse);
-    rpc RegisterAdmin(RegisterAdminRequest) returns (RegisterResponse);
-
+    // Авторизация
     rpc Login(LoginRequest) returns (LoginResponse);
 
-    rpc DeleteUser(DeleteRequest) returns (google.protobuf.Empty);
+    // Удаление пользователя (из основной БД)
+    rpc DeleteUser(DeleteUserRequest) returns (google.protobuf.Empty);
 
+    // Списки пользователей
     rpc GetStudentsList(google.protobuf.Empty) returns (GetStudentsListResponse);
     rpc GetTeachersList(google.protobuf.Empty) returns (GetTeachersListResponse);
     rpc GetAdminsList(google.protobuf.Empty) returns (GetAdminsListResponse);
 
+    // Проверка роли
     rpc IsTeacher(IsTeacherRequest) returns (IsTeacherResponse);
     rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse);
     rpc IsStudent(IsStudentRequest) returns (IsStudentResponse);
-
 }
 
-message Date{
+// ------------------------
+// Общие структуры
+// ------------------------
+
+message Date {
     int32 year = 1;
     int32 month = 2;
     int32 day = 3;
@@ -67,50 +74,39 @@ message AdminBody {
     string password = 2;
 }
 
+// ------------------------
+// Pending регистрация
+// ------------------------
+
 message PendingUser {
     UserBody user_info = 1;
-    map<string, string> meta = 2;
+    string role = 2;
+    map<string, string> meta = 3;
 }
 
 message RegisterPendingRequest {
     PendingUser info = 1;
 }
 
-message RegisterPendingResponse{
+message RegisterPendingResponse {
     string user_id = 1;
 }
 
-message GetPendingListResponse{
+message GetPendingListResponse {
     repeated PendingUser users = 1;
 }
 
 message DeletePendingUserRequest {
-    string  user_id = 1;
+    string user_id = 1;
 }
 
 message ApprovePendingUserRequest {
     string user_id = 1;
-    PendingUser info = 2;
 }
 
-
-message RegisterStudentRequest {
-    StudentBody info = 1;
-}
-
-message RegisterTeacherRequest {
-    TeacherBody info = 1;
-}
-
-message RegisterAdminRequest {
-    AdminBody info = 1;
-}
-
-message RegisterResponse {
-    int64 user_id = 1;
-}
-
-
+// ------------------------
+// Авторизация
+// ------------------------
 
 message LoginRequest {
     string email = 1;
@@ -122,11 +118,14 @@ message LoginResponse {
     string token = 1;
 }
 
-message DeleteRequest {
+// ------------------------
+// Удаление и списки
+// ------------------------
+
+message DeleteUserRequest {
     int64 user_id = 1;
     string role = 2;
 }
-
 
 message GetStudentsListResponse {
     repeated StudentBody students = 1;
@@ -139,6 +138,10 @@ message GetTeachersListResponse {
 message GetAdminsListResponse {
     repeated AdminBody admins = 1;
 }
+
+// ------------------------
+// Проверка ролей
+// ------------------------
 
 message IsAdminRequest {
     int64 user_id = 1;
@@ -159,6 +162,7 @@ message IsTeacherResponse {
 message IsStudentRequest {
     int64 user_id = 1;
 }
+
 message IsStudentResponse {
     bool is_student = 1;
 }
