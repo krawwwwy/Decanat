@@ -19,7 +19,7 @@ type Auth struct {
 	pendingSaver    PendingSaver
 	pendingProvider PendingProvider
 	pendingDeleter  PendingDeleter
-	userSaver       UserSaver
+	approver        Approver
 	userProvider    UserProvider
 	userDeleter     UserDeleter
 	tokenTTL        time.Duration
@@ -37,6 +37,9 @@ type PendingSaver interface {
 		meta map[string]string,
 	) error
 }
+type Approver interface {
+	ApprovePendingUser(ctx context.Context, userID string) error
+}
 
 type PendingProvider interface {
 	ListPendingUsers(ctx context.Context) ([]models.PendingUser, error)
@@ -44,38 +47,6 @@ type PendingProvider interface {
 
 type PendingDeleter interface {
 	DeletePendingUser(ctx context.Context, id string) error
-}
-
-type UserSaver interface {
-	SaveStudent(ctx context.Context,
-		email string,
-		passHash []byte,
-		name string,
-		surname string,
-		middleName string,
-		phoneNumber string,
-		birthDate models.BirthDate,
-		group string,
-		studentNumber string,
-	) (userID int64, err error)
-
-	SaveTeacher(ctx context.Context,
-		email string,
-		passHash []byte,
-		name string,
-		surname string,
-		middleName string,
-		phoneNumber string,
-		birthDate models.BirthDate,
-		title string,
-		department string,
-		degree string,
-	) (userID int64, err error)
-
-	SaveAdmin(ctx context.Context,
-		email string,
-		passHash []byte,
-	) (userID int64, err error)
 }
 
 type UserDeleter interface {
@@ -111,7 +82,7 @@ func New(
 	pendingSaver PendingSaver,
 	pendingProvider PendingProvider,
 	pendingDeleter PendingDeleter,
-	userSaver UserSaver,
+	approver Approver,
 	userProvider UserProvider,
 	userDeleter UserDeleter,
 	tokenTTL time.Duration,
@@ -121,7 +92,7 @@ func New(
 		pendingSaver:    pendingSaver,
 		pendingProvider: pendingProvider,
 		pendingDeleter:  pendingDeleter,
-		userSaver:       userSaver,
+		approver:        approver,
 		userProvider:    userProvider,
 		userDeleter:     userDeleter,
 		tokenTTL:        tokenTTL,
@@ -227,6 +198,24 @@ func (a *Auth) RegisterPending(
 	return nil
 }
 
+func (a *Auth) ApprovePendingUser(ctx context.Context, userID string) error {
+	const op = "auth.ApprovePendingUser"
+
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("user_id", userID),
+	)
+
+	err := a.approver.ApprovePendingUser(ctx, userID)
+	if err != nil {
+		// @TODO
+	}
+
+	log.Info("approved pending user")
+
+	return nil
+}
+
 func (a *Auth) GetPendingList(ctx context.Context) ([]models.PendingUser, error) {
 	const op = "auth.GetPendingList"
 
@@ -261,133 +250,6 @@ func (a *Auth) DeletePendingUser(ctx context.Context, id string) error {
 	log.Info("deleted pending user", slog.String("id", id))
 
 	return nil
-}
-
-func (a *Auth)
-func (a *Auth) RegisterTeacher(
-	ctx context.Context,
-	email string,
-	password string,
-	name string,
-	surname string,
-	middleName string,
-	phoneNumber string,
-	birthDate models.BirthDate,
-	title string,
-	department string,
-	degree string,
-) (userID int64, err error) {
-	const op = "auth.RegisterTeacher"
-
-	log := a.log.With(
-		slog.String("op", op),
-		slog.String("user_email", email),
-	)
-
-	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Error("failed to generate hash", sl.Err(err))
-
-		return emptyID, fmt.Errorf("%s: %w", op, err)
-	}
-
-	id, err := a.userSaver.SaveTeacher(ctx, email, passHash, name, surname, middleName, phoneNumber, birthDate, title, department, degree)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserExists) {
-			log.Warn("teacher already exists", sl.Err(err))
-
-			return emptyID, fmt.Errorf("%s: %w", op, ErrUserExists)
-		}
-
-		log.Error("failed to save teacher", sl.Err(err))
-
-		return emptyID, fmt.Errorf("%s: %w", op, err)
-	}
-
-	log.Info("teacher registered")
-
-	return id, nil
-}
-
-func (a *Auth) RegisterStudent(
-	ctx context.Context,
-	email string,
-	password string,
-	name string,
-	surname string,
-	middleName string,
-	phoneNumber string,
-	birthDate models.BirthDate,
-	group string,
-	studentNumber string,
-) (userID int64, err error) {
-	const op = "auth.RegisterStudent"
-
-	log := a.log.With(
-		slog.String("op", op),
-		slog.String("user_email", email),
-	)
-
-	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Error("failed to generate hash", sl.Err(err))
-
-		return emptyID, fmt.Errorf("%s: %w", op, err)
-	}
-
-	id, err := a.userSaver.SaveStudent(ctx, email, passHash, name, surname, middleName, phoneNumber, birthDate, group, studentNumber)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserExists) {
-			log.Warn("student already exists", sl.Err(err))
-
-			return emptyID, fmt.Errorf("%s: %w", op, ErrUserExists)
-		}
-
-		log.Error("failed to save student", sl.Err(err))
-
-		return emptyID, fmt.Errorf("%s: %w", op, err)
-	}
-
-	log.Info("student registered")
-
-	return id, nil
-}
-
-func (a *Auth) RegisterAdmin(
-	ctx context.Context,
-	email string,
-	password string,
-) (userID int64, err error) {
-	const op = "auth.RegisterAdmin"
-
-	log := a.log.With(
-		slog.String("op", op),
-		slog.String("user_email", email),
-	)
-
-	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Error("failed to generate hash", sl.Err(err))
-
-		return emptyID, fmt.Errorf("%s: %w", op, err)
-	}
-
-	id, err := a.userSaver.SaveAdmin(ctx, email, passHash)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserExists) {
-			log.Warn("admin already exists", sl.Err(err))
-
-			return emptyID, fmt.Errorf("%s: %w", op, ErrUserExists)
-		}
-
-		log.Error("failed to save admin", sl.Err(err))
-
-		return emptyID, fmt.Errorf("%s: %w", op, err)
-	}
-
-	log.Info("student registered")
-
-	return id, nil
 }
 
 func (a *Auth) GetStudentsList(ctx context.Context) ([]models.Student, error) {
