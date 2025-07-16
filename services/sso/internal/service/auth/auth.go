@@ -15,11 +15,35 @@ import (
 )
 
 type Auth struct {
-	log          *slog.Logger
-	userSaver    UserSaver
-	userProvider UserProvider
-	userDeleter  UserDeleter
-	tokenTTL     time.Duration
+	log             *slog.Logger
+	pendingSaver    PendingSaver
+	pendingProvider PendingProvider
+	pendingDeleter  PendingDeleter
+	userSaver       UserSaver
+	userProvider    UserProvider
+	userDeleter     UserDeleter
+	tokenTTL        time.Duration
+}
+
+type PendingSaver interface {
+	SavePendingUser(ctx context.Context,
+		email string,
+		passHash []byte,
+		name string,
+		surname string,
+		middleName string,
+		phoneNumber string,
+		birthDate models.BirthDate,
+		meta map[string]string,
+	) error
+}
+
+type PendingProvider interface {
+	ListPendingUsers(ctx context.Context) ([]models.PendingUser, error)
+}
+
+type PendingDeleter interface {
+	DeletePendingUser(ctx context.Context, id string) error
 }
 
 type UserSaver interface {
@@ -34,6 +58,7 @@ type UserSaver interface {
 		group string,
 		studentNumber string,
 	) (userID int64, err error)
+
 	SaveTeacher(ctx context.Context,
 		email string,
 		passHash []byte,
@@ -46,20 +71,27 @@ type UserSaver interface {
 		department string,
 		degree string,
 	) (userID int64, err error)
+
 	SaveAdmin(ctx context.Context,
 		email string,
 		passHash []byte,
 	) (userID int64, err error)
 }
+
 type UserDeleter interface {
 	DeleteUser(ctx context.Context, userID int64, role string) (err error)
 }
 type UserProvider interface {
 	Student(ctx context.Context, email string) (models.Student, error)
-	IsStudent(ctx context.Context, userID int64) (bool, error)
 	Teacher(ctx context.Context, email string) (models.Teacher, error)
-	IsTeacher(ctx context.Context, userID int64) (bool, error)
 	Admin(ctx context.Context, email string) (models.Admin, error)
+
+	StudentsList(ctx context.Context) ([]models.Student, error)
+	TeacherList(ctx context.Context) ([]models.Teacher, error)
+	AdminList(ctx context.Context) ([]models.Admin, error)
+
+	IsStudent(ctx context.Context, userID int64) (bool, error)
+	IsTeacher(ctx context.Context, userID int64) (bool, error)
 	IsAdmin(ctx context.Context, userID int64) (bool, error)
 }
 
@@ -76,17 +108,23 @@ const emptyID = 0
 // New returns a new instance of the Auth service.
 func New(
 	log *slog.Logger,
+	pendingSaver PendingSaver,
+	pendingProvider PendingProvider,
+	pendingDeleter PendingDeleter,
 	userSaver UserSaver,
 	userProvider UserProvider,
 	userDeleter UserDeleter,
 	tokenTTL time.Duration,
 ) *Auth {
 	return &Auth{
-		log:          log,
-		userSaver:    userSaver,
-		userProvider: userProvider,
-		userDeleter:  userDeleter,
-		tokenTTL:     tokenTTL,
+		log:             log,
+		pendingSaver:    pendingSaver,
+		pendingProvider: pendingProvider,
+		pendingDeleter:  pendingDeleter,
+		userSaver:       userSaver,
+		userProvider:    userProvider,
+		userDeleter:     userDeleter,
+		tokenTTL:        tokenTTL,
 	}
 }
 
@@ -155,6 +193,77 @@ func (a *Auth) Login(ctx context.Context,
 	return token, nil
 }
 
+func (a *Auth) RegisterPending(
+	ctx context.Context,
+	email string,
+	password string,
+	name string,
+	surname string,
+	middleName string,
+	phoneNumber string,
+	birthDate models.BirthDate,
+	meta map[string]string,
+) error {
+	const op = "auth.RegisterPending"
+
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("email", email),
+	)
+
+	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Error("failed to generate hash", sl.Err(err))
+
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = a.pendingSaver.SavePendingUser(ctx, email, passHash, name, surname, middleName, phoneNumber, birthDate, meta)
+	if err != nil {
+		// @TODO
+	}
+
+	log.Info("added pending user to redis")
+	return nil
+}
+
+func (a *Auth) GetPendingList(ctx context.Context) ([]models.PendingUser, error) {
+	const op = "auth.GetPendingList"
+
+	log := a.log.With(
+		slog.String("op", op),
+	)
+
+	var users []models.PendingUser
+
+	users, err := a.pendingProvider.ListPendingUsers(ctx)
+	if err != nil {
+		// @TODO
+	}
+
+	log.Info("got pending users")
+
+	return users, err
+}
+
+func (a *Auth) DeletePendingUser(ctx context.Context, id string) error {
+	const op = "auth.DeletePendingUser"
+
+	log := a.log.With(
+		slog.String("op", op),
+	)
+
+	err := a.pendingDeleter.DeletePendingUser(ctx, id)
+	if err != nil {
+		//@TODO
+	}
+
+	log.Info("deleted pending user", slog.String("id", id))
+
+	return nil
+}
+
+func (a *Auth)
 func (a *Auth) RegisterTeacher(
 	ctx context.Context,
 	email string,
@@ -279,6 +388,63 @@ func (a *Auth) RegisterAdmin(
 	log.Info("student registered")
 
 	return id, nil
+}
+
+func (a *Auth) GetStudentsList(ctx context.Context) ([]models.Student, error) {
+	const op = "auth.GetStudentsList"
+
+	log := a.log.With(
+		slog.String("op", op),
+	)
+
+	var students []models.Student
+
+	students, err := a.userProvider.StudentsList(ctx)
+	if err != nil {
+		// @TODO
+	}
+
+	log.Info("got students list")
+
+	return students, err
+}
+
+func (a *Auth) GetTeachersList(ctx context.Context) ([]models.Teacher, error) {
+	const op = "auth.GetTeachersList"
+
+	log := a.log.With(
+		slog.String("op", op),
+	)
+
+	var teachers []models.Teacher
+
+	teachers, err := a.userProvider.TeacherList(ctx)
+	if err != nil {
+		// @TODO
+	}
+
+	log.Info("got teachers list")
+
+	return teachers, err
+}
+
+func (a *Auth) GetAdminsList(ctx context.Context) ([]models.Admin, error) {
+	const op = "auth.GetAdminsList"
+
+	log := a.log.With(
+		slog.String("op", op),
+	)
+
+	var admins []models.Admin
+
+	admins, err := a.userProvider.AdminList(ctx)
+	if err != nil {
+		// @TODO
+	}
+
+	log.Info("got admins list")
+
+	return admins, err
 }
 
 func (a *Auth) DeleteUser(ctx context.Context, userID int64, role string) error {
