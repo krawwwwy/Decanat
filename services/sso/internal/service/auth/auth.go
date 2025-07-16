@@ -34,6 +34,7 @@ type PendingSaver interface {
 		middleName string,
 		phoneNumber string,
 		birthDate models.BirthDate,
+		role string,
 		meta map[string]string,
 	) error
 }
@@ -72,6 +73,7 @@ var (
 	ErrUserExists          = errors.New("user already exists")
 	ErrRoleNotExists       = errors.New("role does not exists")
 	ErrUserNotMatchingRole = errors.New("user not matching role")
+	ErrNoPendingUsers      = errors.New("no pending users")
 )
 
 const emptyID = 0
@@ -173,6 +175,7 @@ func (a *Auth) RegisterPending(
 	middleName string,
 	phoneNumber string,
 	birthDate models.BirthDate,
+	role string,
 	meta map[string]string,
 ) error {
 	const op = "auth.RegisterPending"
@@ -189,7 +192,7 @@ func (a *Auth) RegisterPending(
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	err = a.pendingSaver.SavePendingUser(ctx, email, passHash, name, surname, middleName, phoneNumber, birthDate, meta)
+	err = a.pendingSaver.SavePendingUser(ctx, email, passHash, name, surname, middleName, phoneNumber, birthDate, role, meta)
 	if err != nil {
 		// @TODO
 	}
