@@ -7,14 +7,30 @@ import "google/protobuf/empty.proto";
 option go_package = "krawwwwy.sso.v1;sso";
 
 service Auth {
+    rpc RegisterPending(RegisterPendingRequest) returns (RegisterPendingResponse);
+
+    rpc GetPendingList(google.protobuf.Empty) returns (GetPendingListResponse);
+
+    rpc DeletePendingUser(DeletePendingUserRequest) returns (google.protobuf.Empty);
+
+    rpc ApprovePendingUser(ApprovePendingUserRequest) returns (google.protobuf.Empty);
+
     rpc RegisterStudent(RegisterStudentRequest) returns (RegisterResponse);
     rpc RegisterTeacher(RegisterTeacherRequest) returns (RegisterResponse);
     rpc RegisterAdmin(RegisterAdminRequest) returns (RegisterResponse);
+
     rpc Login(LoginRequest) returns (LoginResponse);
+
+    rpc DeleteUser(DeleteRequest) returns (google.protobuf.Empty);
+
+    rpc GetStudentsList(google.protobuf.Empty) returns (GetStudentsListResponse);
+    rpc GetTeachersList(google.protobuf.Empty) returns (GetTeachersListResponse);
+    rpc GetAdminsList(google.protobuf.Empty) returns (GetAdminsListResponse);
+
     rpc IsTeacher(IsTeacherRequest) returns (IsTeacherResponse);
     rpc IsAdmin(IsAdminRequest) returns (IsAdminResponse);
     rpc IsStudent(IsStudentRequest) returns (IsStudentResponse);
-    rpc DeleteUser(DeleteRequest) returns (google.protobuf.Empty);
+
 }
 
 message Date{
@@ -23,7 +39,7 @@ message Date{
     int32 day = 3;
 }
 
-message RegisterStudentRequest {
+message UserBody {
     string email = 1;
     string password = 2;
     string name = 3;
@@ -31,34 +47,69 @@ message RegisterStudentRequest {
     string middle_name = 5;
     string phone_number = 6;
     Date birth_date = 7;
-    string group = 8;
-    string student_number = 9;
+}
+
+message StudentBody {
+    UserBody user_info = 1;
+    string group = 2;
+    string student_number = 3;
+}
+
+message TeacherBody {
+    UserBody user_info = 1;
+    string title = 2;
+    string department = 3;
+    string degree = 4;
+}
+
+message AdminBody {
+    string email = 1;
+    string password = 2;
+}
+
+message PendingUser {
+    UserBody user_info = 1;
+    map<string, string> meta = 2;
+}
+
+message RegisterPendingRequest {
+    PendingUser info = 1;
+}
+
+message RegisterPendingResponse{
+    string user_id = 1;
+}
+
+message GetPendingListResponse{
+    repeated PendingUser users = 1;
+}
+
+message DeletePendingUserRequest {
+    string  user_id = 1;
+}
+
+message ApprovePendingUserRequest {
+    string user_id = 1;
+    PendingUser info = 2;
+}
 
 
+message RegisterStudentRequest {
+    StudentBody info = 1;
 }
 
 message RegisterTeacherRequest {
-    string email = 1;
-    string password = 2;
-    string name = 3;
-    string surname = 4;
-    string middle_name = 5;
-    string phone_number = 6;
-    Date birth_date = 7;
-    string title =  8;
-    string department = 9;
-    string degree = 10;
-
+    TeacherBody info = 1;
 }
 
 message RegisterAdminRequest {
-    string email = 1;
-    string password = 2;
+    AdminBody info = 1;
 }
 
 message RegisterResponse {
     int64 user_id = 1;
 }
+
 
 
 message LoginRequest {
@@ -69,6 +120,24 @@ message LoginRequest {
 
 message LoginResponse {
     string token = 1;
+}
+
+message DeleteRequest {
+    int64 user_id = 1;
+    string role = 2;
+}
+
+
+message GetStudentsListResponse {
+    repeated StudentBody students = 1;
+}
+
+message GetTeachersListResponse {
+    repeated TeacherBody teachers = 1;
+}
+
+message GetAdminsListResponse {
+    repeated AdminBody admins = 1;
 }
 
 message IsAdminRequest {
@@ -92,9 +161,4 @@ message IsStudentRequest {
 }
 message IsStudentResponse {
     bool is_student = 1;
-}
-
-message DeleteRequest {
-    int64 user_id = 1;
-    string role = 2;
 }
