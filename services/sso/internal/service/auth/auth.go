@@ -26,24 +26,15 @@ type Auth struct {
 }
 
 type PendingSaver interface {
-	SavePendingUser(ctx context.Context,
-		email string,
-		passHash []byte,
-		name string,
-		surname string,
-		middleName string,
-		phoneNumber string,
-		birthDate models.BirthDate,
-		role string,
-		meta map[string]string,
-	) error
+	SavePendingUser(ctx context.Context, user models.PendingUser) error
 }
 type Approver interface {
-	ApprovePendingUser(ctx context.Context, userID string) error
+	ApprovePendingUser(ctx context.Context, user models.PendingUser) error
 }
 
 type PendingProvider interface {
 	ListPendingUsers(ctx context.Context) ([]models.PendingUser, error)
+	PendingUser(ctx context.Context, userID string) (models.PendingUser, error)
 }
 
 type PendingDeleter interface {
@@ -73,7 +64,6 @@ var (
 	ErrUserExists          = errors.New("user already exists")
 	ErrRoleNotExists       = errors.New("role does not exists")
 	ErrUserNotMatchingRole = errors.New("user not matching role")
-	ErrNoPendingUsers      = errors.New("no pending users")
 )
 
 const emptyID = 0
@@ -192,9 +182,27 @@ func (a *Auth) RegisterPending(
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	err = a.pendingSaver.SavePendingUser(ctx, email, passHash, name, surname, middleName, phoneNumber, birthDate, role, meta)
+	user := models.PendingUser{
+		Email:       email,
+		PassHash:    passHash,
+		Name:        name,
+		Surname:     surname,
+		MiddleName:  middleName,
+		PhoneNumber: phoneNumber,
+		BirthDate:   birthDate,
+		Role:        role,
+		Meta:        meta,
+	}
+
+	err = a.pendingSaver.SavePendingUser(ctx, user)
 	if err != nil {
-		// @TODO
+		if errors.Is(err, storage.ErrInvalidUserData) {
+			log.Error("can't marshall or set user", sl.Err(err))
+
+			return fmt.Errorf("%s: %w", op, err)
+		}
+
+		log.Error("internal", sl.Err(err))
 	}
 
 	log.Info("added pending user to redis")
@@ -209,7 +217,27 @@ func (a *Auth) ApprovePendingUser(ctx context.Context, userID string) error {
 		slog.String("user_id", userID),
 	)
 
-	err := a.approver.ApprovePendingUser(ctx, userID)
+	var user models.PendingUser
+	user, err := a.pendingProvider.PendingUser(ctx, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNoValueForKey) {
+			log.Warn("user not found", sl.Err(err))
+
+			return fmt.Errorf("%s : %w", op, ErrInvalidCredentials)
+		}
+		if errors.Is(err, storage.ErrInvalidUserData) {
+			log.Warn("invalid data", sl.Err(err))
+
+			return fmt.Errorf("%s : %w", op, ErrInvalidCredentials)
+		}
+
+		log.Error("internal error", sl.Err(err))
+
+		return fmt.Errorf("internal error")
+
+	}
+
+	err = a.approver.ApprovePendingUser(ctx, user)
 	if err != nil {
 		// @TODO
 	}
@@ -230,7 +258,21 @@ func (a *Auth) GetPendingList(ctx context.Context) ([]models.PendingUser, error)
 
 	users, err := a.pendingProvider.ListPendingUsers(ctx)
 	if err != nil {
-		// @TODO
+		if errors.Is(err, storage.ErrNoValueForKey) {
+			log.Error("user not found", sl.Err(err))
+
+			return nil, fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+		if errors.Is(err, storage.ErrInvalidUserData) {
+			log.Error("invalid data", sl.Err(err))
+
+			return nil, fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+	}
+	if users == nil {
+		log.Warn("no pending users")
+
+		return users, nil
 	}
 
 	log.Info("got pending users")
@@ -247,7 +289,11 @@ func (a *Auth) DeletePendingUser(ctx context.Context, id string) error {
 
 	err := a.pendingDeleter.DeletePendingUser(ctx, id)
 	if err != nil {
-		//@TODO
+		if errors.Is(err, storage.ErrNoValueForKey) {
+			log.Error("user not found", sl.Err(err))
+
+			return fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
 	}
 
 	log.Info("deleted pending user", slog.String("id", id))
